@@ -6,8 +6,8 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "classic-pg-listener"
-version = "1.2.6"
+name = "classic-pg-tasks"
+version = "0.0.1"
 authors = [
     {name = "Sergei Variasov", email = "variasov@gmail.com"},
 ]
@@ -16,9 +16,8 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    "classic-actors~=0.2",
-    "psycopg~=3.2.1",
-    "classic-thread-pool-executor~=1.1.0",
+    "classic-db-tools~=0.0",
+    "psycopg~=3.2",
 ]
 
 [project.urls]

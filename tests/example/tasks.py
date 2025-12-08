@@ -1,13 +1,18 @@
-import threading
+import time
+
+from classic.db_tools import Engine
+from classic.components import component
 
 
-class SomeTask(threading.local):
+@component
+class SomeTask:
+    db: Engine
 
-    def run(self):
-        print('SomeTask run')
+    def run(self, **kwargs):
+        print('New task')
+        # raise Exception
 
-
-class AnotherTask(threading.local):
-
-    def run(self):
-        print('AnotherTask run')
+        with self.db:
+            self.db.query(
+                'SELECT finish_some_task(%(worker_id)s, %(id)s)', static=True,
+            ).execute(**kwargs)

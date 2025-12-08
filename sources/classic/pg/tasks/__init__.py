@@ -1,1 +1,1 @@
-from .worker import Worker
+from .simple import SimpleWorker
