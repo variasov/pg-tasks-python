@@ -1,0 +1,7 @@
+psycopg==3.3.3
+pydantic==2.12.5
+pydantic-settings==2.13.1
+gevent~=25.9
+gevent-runner==0.0.3
+classic-db-tools==0.1.0
+classic-health-checks==0.1.1

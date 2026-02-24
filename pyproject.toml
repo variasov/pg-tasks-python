@@ -6,22 +6,21 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "classic-pg-tasks"
+name = "pg-tasks"
 version = "0.0.1"
 authors = [
     {name = "Sergei Variasov", email = "variasov@gmail.com"},
 ]
-description = "Simple in-process scheduler"
+description = "Python client for pg_tasks"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    "classic-db-tools~=0.0",
-    "psycopg~=3.2",
+    "psycopg~=3.3",
 ]
 
 [project.urls]
-Homepage = "https://github.com/variasov/classic-pg-listener"
+Homepage = "https://github.com/variasov/pg_tasks_python"
 
 [project.optional-dependencies]
 dev = [
