@@ -1,38 +1,47 @@
-import gevent.monkey
-gevent.monkey.patch_all()
-
 import logging
+from types import SimpleNamespace
 
 from classic.db_tools import ConnectionPool, Engine
-from classic.health_checks import HealthCheck
+from classic.operations import Operation
 import psycopg
-from gevent_runner import GreenletRunner
+
+from pg_tasks import Worker
 
 from .settings import Settings
-from . import tasks
+from . import tasks, use_cases
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 settings = Settings()
 
-db_pool = ConnectionPool(
+DB = SimpleNamespace()
+DB.pool = ConnectionPool(
     lambda: psycopg.connect(
         str(settings.DB_URL),
         autocommit=True,
     ),
     limit=settings.DB_POOL_SIZE,
 )
-db_engine = Engine('', db_pool)
+DB.engine = Engine('', DB.pool)
 
-do_something = tasks.DoSomething(
-    db=db_engine,
-    conn_factory=db_pool.connect,
-)
-do_another = tasks.DoAnother(
-    conn_factory=db_pool.connect,
+APP = SimpleNamespace()
+APP.operation = Operation(DB.engine)
+APP.do_something = use_cases.DoSomething(
+    db=DB.engine,
+    operation_=APP.operation,
 )
 
-worker = GreenletRunner()
-worker.add(HealthCheck(), daemon=True)
-worker.add(do_something.loop, do_another.loop)
+TASKS = SimpleNamespace()
+TASKS.do_something = tasks.DoSomething(
+    db=DB.engine,
+    use_case=APP.do_something,
+    operation_=APP.operation,
+)
+TASKS.do_another = tasks.DoAnother(
+    db=DB.engine,
+    operation_=APP.operation,
+)
+TASKS.worker = Worker(str(settings.DB_URL))
+TASKS.worker.add(TASKS.do_something)
+TASKS.worker.add(TASKS.do_another)

@@ -17,17 +17,28 @@ license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "psycopg~=3.3",
+    "psycopg_pool~=3.3",
+    "frozendict~=2.4",
 ]
 
 [project.urls]
 Homepage = "https://github.com/variasov/pg_tasks_python"
 
-[project.optional-dependencies]
-dev = [
-    "build~=1.2.2.post1",
-    "pytest==8.3.4",
-    "pytest-cov==6.0.0",
-]
-
 [tool.setuptools.packages.find]
 where = ["sources"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.4",
+    "pytest~=9.0",
+    "psycopg~=3.3",
+    "pytest==9.0.2",
+    "classic-db-tools~=1.0",
+    "classic-operations",
+    "classic-scenarios",
+    "classic-components",
+    "classic-health-checks~=0.1",
+    "pydantic",
+    "pydantic_settings",
+    "gevent~=25.9",
+]

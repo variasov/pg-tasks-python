@@ -17,6 +17,7 @@ SELECT tasks.register(
     table_name := 'do_something',
     timeout := '00:01:00',
     max_retries := 3,
+    notification_interval := '10s',
     storage_time := '24:00:00'
 );
 
