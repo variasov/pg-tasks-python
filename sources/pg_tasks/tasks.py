@@ -23,6 +23,8 @@ _camel_case_re = re.compile(r'(?<!^)(?=[A-Z])')
 
 @dataclass
 class Task:
+    """Base class for tasks."""
+
     logger: logging.Logger = None
 
     ext_schema: ClassVar[str] = 'tasks'
@@ -84,6 +86,12 @@ class Task:
         conn: psycopg.Connection,
         batch_size: int,
     ) -> list[TaskFields]:
+        """
+        Acquire batch of tasks with size 'batch_size' from DB.
+
+        Batch must be finished before task timeout, else another workers
+        can acquire not finished tasks, and result's may be doubled.
+        """
         cursor = conn.cursor(row_factory=psycopg.rows.dict_row)
         return cursor.execute(self._acquire_query, (batch_size, )).fetchall()
 
@@ -94,10 +102,13 @@ class Task:
         started_at: datetime,
         comment: str = None,
     ):
-        conn.execute(
-            self._finish_query,
-            (task_id, started_at, comment),
-        )
+        """
+        Mark task as finished.
+
+        started_at is mandatory. Worker will mark task as finished only if
+        task's created_at in db is equal to started_at from worker.
+        """
+        conn.execute(self._finish_query, (task_id, started_at, comment))
         self.logger.info(
             'Task %s #%s has finished',
             self.__class__.__name__,
@@ -111,6 +122,12 @@ class Task:
         scheduled_to: datetime | timedelta = None,
         comment: str = None,
     ):
+        """
+        Schedule task for retry.
+
+        If scheduled_to present, new execution will start after the time
+        in scheduled_to, if not, some worker can execute it immediately.
+        """
         if isinstance(scheduled_to, timedelta):
             scheduled_to = datetime.now() + scheduled_to
 
@@ -127,6 +144,7 @@ class Task:
         task_id: int,
         comment: str = None,
     ):
+        """Cancel task in DB. Another worker can't acquire task anymore."""
         conn.execute(self._cancel_query, (task_id, comment))
         self.logger.info(
             'Task %s #%s was canceled',
@@ -135,6 +153,7 @@ class Task:
         )
 
     def reset(self, conn: psycopg.Connection, task_id: int) -> None:
+        """Reset task state in DB for new execution."""
         conn.execute(self._reset_query, (task_id, ))
         self.logger.info(
             'Task %s #%s has been reset',
@@ -143,6 +162,7 @@ class Task:
         )
 
     def clean(self, conn: psycopg.Connection, finished_before: datetime) -> int:
+        """Purge tasks, finished before finished_before parameter"""
         result = conn.execute(self._clean_query, (finished_before, )).rowcount
         self.logger.info(
             'Task queue %s was cleaned',
