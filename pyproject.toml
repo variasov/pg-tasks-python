@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/variasov/pg_tasks_python"
+Homepage = "https://github.com/variasov/pg-tasks-python"
 
 [tool.setuptools.packages.find]
 where = ["sources"]
