@@ -142,10 +142,11 @@ class Task:
         self,
         conn: psycopg.Connection,
         task_id: int,
+        planned_to: datetime = None,
         comment: str = None,
     ):
         """Cancel task in DB. Another worker can't acquire task anymore."""
-        conn.execute(self._cancel_query, (task_id, comment))
+        conn.execute(self._cancel_query, (task_id, planned_to, comment))
         self.logger.info(
             'Task %s #%s was canceled',
             self.__class__.__name__,
