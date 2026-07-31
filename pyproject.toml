@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pg-tasks"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
     {name = "Sergei Variasov", email = "variasov@gmail.com"},
 ]
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/variasov/pg-tasks-python"
+Homepage = "https://github.com/variasov/pg-tasks"
 
 [tool.setuptools.packages.find]
 where = ["sources"]
