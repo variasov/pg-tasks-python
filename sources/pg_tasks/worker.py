@@ -1,18 +1,18 @@
 import logging
 import threading
-from typing import Optional
 
 import psycopg
-from psycopg_pool import ConnectionPool
-
+import psycopg_pool
 from frozendict import frozendict
+from psycopg.rows import TupleRow
 
 from .tasks import Task
+from .types import TaskFields
 
 
 class WorkerThread(threading.Thread):
     _task: Task
-    _pool: ConnectionPool
+    _pool: psycopg_pool.ConnectionPool
     _logger: logging.Logger
     _notification_received: threading.Event
     _need_to_stop: threading.Event
@@ -20,7 +20,7 @@ class WorkerThread(threading.Thread):
     def __init__(
         self,
         task: Task,
-        conn_pool: ConnectionPool,
+        conn_pool: psycopg_pool.ConnectionPool,
         logger: logging.Logger,
     ) -> None:
         super().__init__()
@@ -38,14 +38,19 @@ class WorkerThread(threading.Thread):
             conn = None
             try:
                 conn = self._conn_pool.getconn()
-                tasks = self._task.acquire(conn, self._task.batch_size)
+                tasks: list[TaskFields] = self._task.acquire(
+                    conn, self._task.batch_size
+                )
+            except psycopg.OperationalError:
+                self._logger.warning("Timeout while connecting with DB")
+                continue
             finally:
                 if conn is not None:
                     self._conn_pool.putconn(conn)
 
             if not tasks:
                 self._logger.debug(
-                    'No %s in queue, waiting %s secs',
+                    "No %s in queue, waiting %s secs",
                     self._task,
                     self._task.interval,
                 )
@@ -54,7 +59,7 @@ class WorkerThread(threading.Thread):
                 continue
 
             self._logger.debug(
-                'Received %s %s from queue',
+                "Received %s %s from queue",
                 len(tasks),
                 self._task,
             )
@@ -63,7 +68,9 @@ class WorkerThread(threading.Thread):
                     self._task.run(**task)
                 except Exception:
                     self._logger.exception(
-                        '%s #%s failed', self._task, task['id'],
+                        "%s #%s failed",
+                        self._task,
+                        task['id'],
                     )
 
     def stop(self):
@@ -72,14 +79,10 @@ class WorkerThread(threading.Thread):
 
 
 class Worker:
-    """
-
-    """
-
     heartbeat_interval: float  # In seconds
 
-    _conn_pool: ConnectionPool
-    _conn: Optional[psycopg.Connection]
+    _conn_pool: psycopg_pool.ConnectionPool[psycopg.Connection[TupleRow]]
+    _conn: psycopg.Connection | None
     _registry: frozendict[str, list[WorkerThread]]
     _registry_lock: threading.RLock
     _logger: logging.Logger
@@ -88,26 +91,27 @@ class Worker:
 
     def __init__(
         self,
-        conn_info: Optional[str] = None,
+        conn_info: str | None = None,
         heartbeat_interval: float = 60.0,
-        pool: Optional[ConnectionPool] = None,
-        logger: logging.Logger = None,
+        pool: psycopg_pool.ConnectionPool | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
-        self._logger = logger or logging.getLogger('pg_tasks.worker')
+        self._logger = logger or logging.getLogger("pg_tasks.worker")
 
-        assert pool or conn_info, 'conn_info or pool must be provided'
+        assert pool or conn_info, "conn_info or pool must be provided"
 
         if pool is not None:
             self._conn_pool = pool
-            if (
-                self._conn_pool.kwargs is None or
-                self._conn_pool.kwargs.get('autocommit', False) is False
-            ):
-                self._logger.warning('Set autocommit=False in external pool!')
-                self._conn_pool.kwargs |= {'autocommit': True}
+            if self._conn_pool.kwargs is None:
+                self._conn_pool.kwargs = {"autocommit": True}
+            elif isinstance(self._conn_pool.kwargs, dict):
+                self._logger.warning("Set autocommit=False in external pool!")
+                self._conn_pool.kwargs |= {"autocommit": True}
         else:
-            self._conn_pool = ConnectionPool(
-                conn_info, kwargs={'autocommit': True},
+            self._conn_pool = psycopg_pool.ConnectionPool(
+                conn_info,
+                connection_class=psycopg.Connection[TupleRow],
+                kwargs={"autocommit": True},
             )
 
         self._conn = None
@@ -146,11 +150,13 @@ class Worker:
             except KeyError:
                 return
 
-            self._registry = frozendict({
-                key: value
-                for key, value in self._registry.items()
-                if key != task.schema_table
-            })
+            self._registry = frozendict(
+                {
+                    key: value
+                    for key, value in self._registry.items()
+                    if key != task.schema_table
+                }
+            )
 
         if self._running:
             for thread in threads:
@@ -188,13 +194,13 @@ class Worker:
 
         try:
             notify = next(self._notifies)
-            self._logger.debug('Notify received - %s', notify.payload)
+            self._logger.debug("Notify received - %s", notify.payload)
 
             for thread in self._registry.get(notify.payload, []):
                 thread.awake()
 
         except StopIteration:
-            self._logger.debug('Timeout while receiving notification')
+            self._logger.debug("Timeout while receiving notification")
 
             if self._ping():
                 self._renew_notifies()
@@ -208,12 +214,12 @@ class Worker:
 
         try:
             self._conn = self._conn_pool.getconn()
-            self._conn.execute('LISTEN pg_tasks')
-            self._logger.info('Listener connection established')
+            self._conn.execute("LISTEN pg_tasks")
+            self._logger.info("Listener connection established")
             self._renew_notifies()
 
         except psycopg.DatabaseError:
-            self._logger.warning('Cannot connect to database for notifications')
+            self._logger.warning("Cannot connect to database for notifications")
             self._close_conn()
             return False
 
@@ -221,16 +227,16 @@ class Worker:
 
     def _renew_notifies(self):
         self._notifies = self._conn.notifies(timeout=self.heartbeat_interval)
-        self._logger.debug('New notifies generator created')
+        self._logger.debug("New notifies generator created")
 
     def _ping(self) -> bool:
         try:
-            self._conn.execute('SELECT 1')
-            self._logger.debug('Listener connection ping successful')
+            self._conn.execute("SELECT 1")
+            self._logger.debug("Listener connection ping successful")
             return True
 
         except psycopg.DatabaseError:
-            self._logger.debug('Listener connection ping failed')
+            self._logger.debug("Listener connection ping failed")
             self._close_conn()
 
         return False
@@ -242,7 +248,7 @@ class Worker:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
-            self._logger.debug('Listener connection closed')
+            self._logger.debug("Listener connection closed")
 
     def _stop_threads(self):
         with self._registry_lock:
