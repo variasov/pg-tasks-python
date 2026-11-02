@@ -1,9 +1,11 @@
 import logging
 import threading
+from collections.abc import Iterator
 
 import psycopg
 import psycopg_pool
 from frozendict import frozendict
+from psycopg import Notify
 from psycopg.rows import TupleRow
 
 from .tasks import Task
@@ -83,6 +85,7 @@ class Worker:
 
     _conn_pool: psycopg_pool.ConnectionPool[psycopg.Connection[TupleRow]]
     _conn: psycopg.Connection | None
+    _notifies: Iterator[Notify] | None
     _registry: frozendict[str, list[WorkerThread]]
     _registry_lock: threading.RLock
     _logger: logging.Logger
@@ -115,6 +118,7 @@ class Worker:
             )
 
         self._conn = None
+        self._notifies = None
 
         self.heartbeat_interval = heartbeat_interval
 
@@ -246,9 +250,16 @@ class Worker:
             self._notifies.close()
 
         if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-            self._logger.debug("Listener connection closed")
+            conn, self._conn = self._conn, None
+            # Коннект нужно вернуть в пул, а не закрывать напрямую.
+            # Пул сам выбросит битый коннект и создаст замену. При прямом
+            # close() пул не узнает о потере коннекта: его счетчик _nconns
+            # остается завышенным, и когда он достигнет max_size при пустом
+            # пуле, новые коннекты больше никогда не будут создаваться -
+            # getconn() начнет бесконечно бросать PoolTimeout (лечение -
+            # только перезапуск процесса).
+            self._conn_pool.putconn(conn)
+            self._logger.debug("Listener connection returned to pool")
 
     def _stop_threads(self):
         with self._registry_lock:
