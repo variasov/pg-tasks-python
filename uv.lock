@@ -408,7 +408,7 @@ wheels = [
 
 [[package]]
 name = "pg-tasks"
-version = "0.0.3"
+version = "0.0.5"
 source = { editable = "." }
 dependencies = [
     { name = "frozendict" },
